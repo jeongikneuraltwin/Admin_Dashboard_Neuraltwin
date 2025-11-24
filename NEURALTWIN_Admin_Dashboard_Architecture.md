@@ -1,7 +1,7 @@
 
 # NEURALTWIN 관리자 콘솔 통합 아키텍처
 
-- **버전**: v10
+- **버전**: v11
 - **상태**: Draft (내부 설계용)
 - **대상 시스템**: NEURALTWIN Admin Web (운영·관리자용 콘솔)
 
@@ -35,6 +35,47 @@
   - 고객용(테넌트) 애플리케이션 상세 아키텍처
   - 개별 컴포넌트 수준 UI/UX 상세 디자인
   - 인프라/네트워크 레벨 배포 구성 세부사항
+
+---
+
+### 0.3 상위 채널 아키텍처 맥락
+
+NEURALTWIN 전체 아키텍처는 **하나의 코어 플랫폼(데이터·시뮬레이션·라이선스)** 을
+다음 **3개의 채널**이 공유하는 구조이다.
+
+```text
+[1. Public Website]       ┐
+[2. Customer Dashboard]   ┤  →  [API Gateway / BFF]
+[3. HQ Admin Dashboard]   ┘
+
+        ↓ (공통으로 사용)
+
+[Identity & Billing Service]      (회원·조직·권한·구독)
+[Tenant / License Service]        (브랜드·매장·라이선스)
+[Data Platform (NEURALMIND)]      (POS/CRM/센서/외부데이터 통합·온톨로지)
+[Simulation & AI (NEURALTWIN)]    (레이아웃/수요/재고/가격/프로모션 시뮬레이션)
+[Sensor Ingestion (NEURALSENSE)]  (와이파이·디바이스 수집)
+[Storage]                         (Postgres, Data Warehouse, Object Storage)
+[Observability / Logs]            (모니터링·알람)
+```
+
+각 채널의 역할은 다음과 같다.
+
+- **Public Website**
+  - 가입/로그인, 가격/플랜 안내, 구독 결제(Stripe/PG) 등
+  - 가입/결제 이후 조직(Brand) + 기본 라이선스를 생성하는 **입구 역할**
+- **Customer Dashboard (웹 대시보드)**  
+  - 브랜드/HQ/매장 팀이 실제로 쓰는 운영 도구
+  - 매장/매출/방문/센서 데이터를 기반으로 분석·시뮬레이션·디지털 트윈을 실행
+- **HQ Admin Dashboard (본 문서의 대상)**  
+  - NEURALTWIN 팀 내부 전용 콘솔
+  - 전 테넌트/라이선스/온톨로지/데이터 파이프라인/AI 모델/3D 제작 파이프라인/비용 등을
+    중앙에서 모니터링·조정하는 **컨트롤 타워 역할**
+
+본 문서에서 정의하는 **관리자 콘솔(= HQ Admin Dashboard)** 은 위 3번째 채널에 해당하며,
+Website / Customer Dashboard 와 **동일한 Auth·Org·License·Data/Simulation Core** 를 공유하지만
+노출되는 화면/기능과 권한 모델이 완전히 다르다.
+
 
 ---
 
@@ -102,26 +143,25 @@
 ```text
 NEURALTWIN ADMIN CONSOLE
 ├─ A. 운영/CS 관리
-│  ├─ Tenants & Users
-│  └─ Usage & Billing
+│  ├─ 사용자 관리
+│  └─ 사용량 및 결제 관리
 │
-├─ B. 데이터 & AI 관리
-│  ├─ Data Pipeline & Quality
-│  ├─ Ontology & Graph Governance
-│  └─ AI & Simulation Monitoring
+├─ B. 데이터 및 AI 관리
+│  ├─ 데이터 관리
+│  ├─ 온톨로지 스키마 관리
+│  └─ AI 및 시뮬레이션 모니터링
 │
 ├─ C. 시스템 관리
-│  ├─ System & Error Console
-│  └─ Admin Tools & Settings
+│  ├─ 시스템 및 오류 관리
+│  └─ 관리자 도구
 │
 └─ D. 3D 디지털 트윈 관리
-   └─ 3D Digital Twin Production
        ├─ 제작 요청 관리
-       └─ 씬 & 에셋 스튜디오
+       └─ 3D 프로덕션 관리
 ```
 
-- 상위 탭(도메인): 운영/CS 관리, 데이터 & AI 관리, 시스템 관리, 3D 디지털 트윈 관리
-- 하위 섹션: Tenants & Users, Usage & Billing, Data Pipeline & Quality 등 기능 단위 화면들로 구성된다.
+- 상위 탭(도메인): 운영/CS 관리, 데이터 및 AI 관리, 시스템 관리, 3D 디지털 트윈 관리
+- 하위 섹션: 사용자 관리, 사용량 및 결제 관리, 데이터 관리 등 기능 단위 화면들로 구성된다.
 - 라우팅(URL) 구조는 기능 단위 하위 섹션 기준으로 정의하고, UI 상에서 상위 탭별로 그룹화한다.
 
 ### 2.2 라우팅 구조 예시
@@ -129,45 +169,45 @@ NEURALTWIN ADMIN CONSOLE
 ```tsx
 <Routes>
   {/* Dashboard (공통 Admin 홈) */}
-  <Route path="/admin" element={<AdminHome />} />
+  <Route path="/hq" element={<AdminHome />} />
 
   {/* A. 운영/CS 관리 */}
-  {/* 1. Tenants & Users */}
-  <Route path="/admin/tenants" element={<TenantListPage />} />
-  <Route path="/admin/tenants/:tenantId" element={<TenantDetailPage />} />
+  {/* 1. 사용자 관리 */}
+  <Route path="/hq/tenants" element={<TenantListPage />} />
+  <Route path="/hq/tenants/:tenantId" element={<TenantDetailPage />} />
 
-  {/* 2. Usage & Billing */}
-  <Route path="/admin/usage" element={<UsageOverviewPage />} />
-  <Route path="/admin/usage/:tenantId" element={<TenantUsageDetailPage />} />
+  {/* 2. 사용량 및 결제 관리 */}
+  <Route path="/hq/usage" element={<UsageOverviewPage />} />
+  <Route path="/hq/usage/:tenantId" element={<TenantUsageDetailPage />} />
 
-  {/* B. 데이터 & AI 관리 */}
-  {/* 3. Data Pipeline & Quality */}
-  <Route path="/admin/data-pipeline" element={<DataPipelineOverviewPage />} />
-  <Route path="/admin/data-pipeline/:tenantId" element={<TenantDataHealthPage />} />
+  {/* B. 데이터 및 AI 관리 */}
+  {/* 3. 데이터 관리 */}
+  <Route path="/hq/data-pipeline" element={<DataPipelineOverviewPage />} />
+  <Route path="/hq/data-pipeline/:tenantId" element={<TenantDataHealthPage />} />
 
-  {/* 4. Ontology & Graph Governance */}
-  <Route path="/admin/ontology" element={<OntologySchemaPage />} />
-  <Route path="/admin/graph" element={<GlobalGraphMonitoringPage />} />
-  <Route path="/admin/graph/:tenantId" element={<TenantGraphDetailPage />} />
+  {/* 4. 온톨로지 스키마 관리 */}
+  <Route path="/hq/ontology" element={<OntologySchemaPage />} />
+  <Route path="/hq/graph" element={<GlobalGraphMonitoringPage />} />
+  <Route path="/hq/graph/:tenantId" element={<TenantGraphDetailPage />} />
 
-  {/* 5. AI & Simulation Monitoring */}
-  <Route path="/admin/ai-sim" element={<AISimOverviewPage />} />
-  <Route path="/admin/ai-sim/:tenantId" element={<TenantAISimDetailPage />} />
+  {/* 5. AI 및 시뮬레이션 모니터링 */}
+  <Route path="/hq/ai-sim" element={<AISimOverviewPage />} />
+  <Route path="/hq/ai-sim/:tenantId" element={<TenantAISimDetailPage />} />
 
   {/* D. 3D 디지털 트윈 관리 */}
-  {/* 6-1. 3D 제작 요청 관리 */}
-  <Route path="/admin/3d-requests" element={<DigitalTwinRequestListPage />} />
-  {/* 6-2. 3D 씬 & 에셋 스튜디오 */}
-  <Route path="/admin/3d-studio" element={<DigitalTwinStudioPage />} />
+  {/* 6-1. 제작 요청 관리 */}
+  <Route path="/hq/3d-requests" element={<DigitalTwinRequestListPage />} />
+  {/* 6-2. 3D 프로덕션 관리 */}
+  <Route path="/hq/3d-studio" element={<DigitalTwinStudioPage />} />
 
   {/* C. 시스템 관리 */}
-  {/* 7. System & Error Console */}
-  <Route path="/admin/system/errors" element={<ErrorConsolePage />} />
-  <Route path="/admin/system/functions" element={<EdgeFunctionsStatusPage />} />
+  {/* 7. 시스템 및 오류 관리 */}
+  <Route path="/hq/system/errors" element={<ErrorConsolePage />} />
+  <Route path="/hq/system/functions" element={<EdgeFunctionsStatusPage />} />
 
-  {/* 8. Admin Tools & Settings */}
-  <Route path="/admin/tools" element={<AdminToolsPage />} />
-  <Route path="/admin/settings" element={<AdminSettingsPage />} />
+  {/* 8. 관리자 도구 */}
+  <Route path="/hq/tools" element={<AdminToolsPage />} />
+  <Route path="/hq/settings" element={<AdminSettingsPage />} />
 </Routes>
 ```
 
@@ -183,7 +223,7 @@ NEURALTWIN ADMIN CONSOLE
 
 ---
 
-### 3.1 Tenants & Users
+### 3.1 사용자 관리
 
 #### 3.1.1 목적
 
@@ -193,11 +233,11 @@ NEURALTWIN ADMIN CONSOLE
 #### 3.1.2 화면 구조
 
 1. **Tenant List**
-   - 라우트: `/admin/tenants`
+   - 라우트: `/hq/tenants`
    - 전체 테넌트 현황을 요약해서 보여주는 목록 화면.
 
 2. **Tenant Detail**
-   - 라우트: `/admin/tenants/:tenantId`
+   - 라우트: `/hq/tenants/:tenantId`
    - 단일 테넌트의 매장/사용자/플랜/최근 활동을 통합해서 보여주는 상세 화면.
 
 #### 3.1.3 Tenant List 뷰
@@ -210,7 +250,7 @@ NEURALTWIN ADMIN CONSOLE
 - 상태(Trial/Active/Suspended)
 - 매장 개수, 활성 사용자 수
 - 최근 활동 일시(마지막 로그인/마지막 데이터 업로드 등)
-- Data Health Score (요약 지표, 3.3 Data Pipeline & Quality와 연동)
+- Data Health Score (요약 지표, 3.3 데이터 관리와 연동)
 
 **정렬/검색**
 
@@ -222,8 +262,8 @@ NEURALTWIN ADMIN CONSOLE
 
 - 테넌트 상태 변경 (Active ↔ Suspended)
 - 상세 화면으로 이동
-- 테넌트별 3D 제작 요청 목록 바로가기 (3D 제작 요청 관리로 이동, tenantId 프리필)
-- 테넌트별 Data Health 상세 바로가기
+- 테넌트별 3D 제작 요청 목록 바로가기 (제작 요청 관리로 이동, tenantId 프리필)
+- 테넌트별 데이터 관리 상세 바로가기
 
 #### 3.1.4 Tenant Detail 뷰
 
@@ -259,15 +299,15 @@ NEURALTWIN ADMIN CONSOLE
 - 사용자 계정 잠금/해제
 - 비밀번호 초기화 링크 발송
 - 테넌트 단위 3D 디지털 트윈 요청 현황 확인
-  - 해당 테넌트와 연관된 3D 제작 요청 목록 조회 (3D 제작 요청 관리로 이동)
+  - 해당 테넌트와 연관된 3D 제작 요청 목록 조회 (제작 요청 관리로 이동)
 - 데이터 재집계 관련 액션 (핵심 링크 역할)
   - 해당 테넌트에 대한 재집계 Job 실행 이력 조회
-  - 3.3 Data Pipeline & Quality 또는 3.8 Admin Tools & Settings로 이동하여
+  - 3.3 데이터 관리 또는 3.8 관리자 도구로 이동하여
     특정 스토어/기간에 대한 재집계 실행
 
 ---
 
-### 3.2 Usage & Billing
+### 3.2 사용량 및 결제 관리
 
 #### 3.2.1 목적
 
@@ -278,11 +318,11 @@ NEURALTWIN ADMIN CONSOLE
 #### 3.2.2 화면 구조
 
 1. **Usage Overview (전역 뷰)**
-   - 라우트: `/admin/usage`
+   - 라우트: `/hq/usage`
    - 전체 시스템 차원의 사용량/트래픽/시뮬레이션 사용 현황 요약.
 
 2. **Tenant Usage Detail (테넌트별 상세)**
-   - 라우트: `/admin/usage/:tenantId`
+   - 라우트: `/hq/usage/:tenantId`
    - 단일 테넌트에 대한 기간별 사용량/추세/이상 패턴 확인.
 
 #### 3.2.3 Usage Overview 뷰
@@ -331,11 +371,11 @@ NEURALTWIN ADMIN CONSOLE
 
 - 사용량 리포트 다운로드 (해당 테넌트 전용 CSV/PDF)
 - 특정 기능(예: 과도한 Simulation 사용)에 메모/태그 추가
-- 이상 패턴 감지 시 AI & Simulation Monitoring, System & Error Console로 바로가기
+- 이상 패턴 감지 시 AI 및 시뮬레이션 모니터링, 시스템 및 오류 관리로 바로가기
 
 ---
 
-### 3.3 Data Pipeline & Quality
+### 3.3 데이터 관리
 
 #### 3.3.1 목적
 
@@ -345,11 +385,11 @@ NEURALTWIN ADMIN CONSOLE
 #### 3.3.2 화면 구조
 
 1. **Data Pipeline Overview (전역 뷰)**
-   - 라우트: `/admin/data-pipeline`
+   - 라우트: `/hq/data-pipeline`
    - 전체 Import/Sync/집계 파이프라인 상태 요약.
 
 2. **Tenant Data Health Detail**
-   - 라우트: `/admin/data-pipeline/:tenantId`
+   - 라우트: `/hq/data-pipeline/:tenantId`
    - 단일 테넌트에 대한 Data Health 상세/에러 로그/재시도 액션 제공.
 
 #### 3.3.3 Data Pipeline Overview 뷰
@@ -406,11 +446,11 @@ NEURALTWIN ADMIN CONSOLE
 - 실패 Job 재시도
 - 대시보드 KPI 재집계 요청 (해당 스토어/기간 대상)
 - Data Health 리포트 출력 (CSV/PDF)
-- Ontology & Graph Governance로 이동하여 스키마 관련 이슈 확인
+- 온톨로지 스키마 관리로 이동하여 스키마 관련 이슈 확인
 
 ---
 
-### 3.4 Ontology & Graph Governance
+### 3.4 온톨로지 스키마 관리
 
 > 중요
 > - 고객(테넌트)용 애플리케이션에서는 Graph 구조가 직접 노출되지 않는다.
@@ -426,15 +466,15 @@ NEURALTWIN ADMIN CONSOLE
 #### 3.4.2 화면 구조
 
 1. **Ontology Schema**
-   - 라우트: `/admin/ontology`
+   - 라우트: `/hq/ontology`
    - 엔티티/관계 타입 정의, 속성, 버전 이력 관리.
 
 2. **Global Graph Monitoring**
-   - 라우트: `/admin/graph`
+   - 라우트: `/hq/graph`
    - 전역 Graph 개요 및 품질 지표 확인.
 
 3. **Tenant Graph Detail**
-   - 라우트: `/admin/graph/:tenantId`
+   - 라우트: `/hq/graph/:tenantId`
    - 테넌트별 Graph 인스턴스 상태, 품질 문제 점검.
 
 #### 3.4.3 Ontology Schema 뷰
@@ -506,11 +546,11 @@ NEURALTWIN ADMIN CONSOLE
 - 정합성 검사 실행(해당 테넌트만)
 - 비정상 인스턴스 목록 Export
 - 자동 정리 Job 트리거(또는 후보만 마크)
-- 3D Digital Twin Production으로 이동하여 Scene/Graph 매핑 상태 확인
+- 3D 디지털 트윈 관리로 이동하여 Scene/Graph 매핑 상태 확인
 
 ---
 
-### 3.5 3D Digital Twin Production
+### 3.5 3D 디지털 트윈 관리
 
 > 이 섹션은 **두 개의 파트**로 구성된다.
 > 1) 사용자가 제출한 디지털 트윈 3D 씬 제작 요청을 관리하는 파트  
@@ -524,13 +564,13 @@ NEURALTWIN ADMIN CONSOLE
 
 #### 3.5.2 화면 구조
 
-1. **3D 제작 요청 관리**
-   - 라우트: `/admin/3d-requests`
+1. **제작 요청 관리**
+   - 라우트: `/hq/3d-requests`
    - 여러 사용자들로부터 들어온 3D 디지털 트윈 제작 요청 목록을 관리하고,
      각 요청의 상세/첨부 파일/응답 내역을 확인·처리하는 화면.
 
-2. **3D 씬 & 에셋 스튜디오**
-   - 라우트: `/admin/3d-studio`
+2. **3D 프로덕션 관리**
+   - 라우트: `/hq/3d-studio`
    - 관리자용 3D 편집 워크스페이스.
    - 테넌트 대시보드의 디지털 트윈 3D 씬 관리 탭과 거의 동일한 구성:
      - 모델 레이어 관리
@@ -540,7 +580,7 @@ NEURALTWIN ADMIN CONSOLE
 
 ---
 
-#### 3.5.3 3D 제작 요청 관리
+#### 3.5.3 제작 요청 관리
 
 ##### 3.5.3.1 요청 목록 뷰
 
@@ -551,7 +591,7 @@ NEURALTWIN ADMIN CONSOLE
 
 **라우트**
 
-- `/admin/3d-requests`
+- `/hq/3d-requests`
 
 **노출 데이터 (컬럼)**
 
@@ -593,7 +633,7 @@ NEURALTWIN ADMIN CONSOLE
   - 마찬가지로 뒤로가기(← 화살표) 버튼으로 목록으로 돌아가기
 
 > 구현 관점:
-> - `/admin/3d-requests` 단일 라우트 내에서
+> - `/hq/3d-requests` 단일 라우트 내에서
 >   `mode = list | detail | reply` 형태로 UI 상태를 전환하는 구조를 권장.
 > - URL 쿼리(`?projectId=...&view=detail`) 정도는 사용 가능하나,
 >   별도의 다른 path로 라우팅 전환까지는 필요 없음.
@@ -604,7 +644,7 @@ NEURALTWIN ADMIN CONSOLE
 
 **진입 경로**
 
-- 3D 제작 요청 관리 목록에서 특정 행의 “상세 보기” 버튼 클릭 시
+- 제작 요청 관리 목록에서 특정 행의 “상세 보기” 버튼 클릭 시
 
 **노출 데이터**
 
@@ -669,7 +709,7 @@ NEURALTWIN ADMIN CONSOLE
 
 ---
 
-#### 3.5.4 3D 씬 & 에셋 스튜디오
+#### 3.5.4 3D 프로덕션 관리
 
 > 사용자 대시보드의 디지털 트윈 3D 씬 관리 UI를 거의 그대로 차용한다.  
 > 구성 요소는 다음과 같다.
@@ -823,7 +863,7 @@ NEURALTWIN ADMIN CONSOLE
 
 ---
 
-### 3.6 AI & Simulation Monitoring
+### 3.6 AI 및 시뮬레이션 모니터링
 
 #### 3.6.1 목적
 
@@ -833,11 +873,11 @@ NEURALTWIN ADMIN CONSOLE
 #### 3.6.2 화면 구조
 
 1. **AI & Simulation Overview**
-   - 라우트: `/admin/ai-sim`
+   - 라우트: `/hq/ai-sim`
    - 전역 시뮬레이션/AI 실행 현황 요약.
 
 2. **Tenant AI & Simulation Detail**
-   - 라우트: `/admin/ai-sim/:tenantId`
+   - 라우트: `/hq/ai-sim/:tenantId`
    - 테넌트별 시뮬레이션/AI 실행 이력, 실패율, 응답 시간 상세.
 
 #### 3.6.3 AI & Simulation Overview 뷰
@@ -882,7 +922,7 @@ NEURALTWIN ADMIN CONSOLE
 
 ---
 
-### 3.7 System & Error Console
+### 3.7 시스템 및 오류 관리
 
 #### 3.7.1 목적
 
@@ -892,11 +932,11 @@ NEURALTWIN ADMIN CONSOLE
 #### 3.7.2 화면 구조
 
 1. **Error & Performance Overview**
-   - 라우트: `/admin/system/errors`
+   - 라우트: `/hq/system/errors`
    - 에러/HTTP 상태 코드/응답 시간 등 요약.
 
 2. **Edge Functions Status**
-   - 라우트: `/admin/system/functions`
+   - 라우트: `/hq/system/functions`
    - Edge Functions별 호출 수/실패율/응답 시간 모니터링.
 
 #### 3.7.3 Error & Performance Overview 뷰
@@ -933,7 +973,7 @@ NEURALTWIN ADMIN CONSOLE
 
 ---
 
-### 3.8 Admin Tools & Settings
+### 3.8 관리자 도구
 
 #### 3.8.1 목적
 
@@ -943,11 +983,11 @@ NEURALTWIN ADMIN CONSOLE
 #### 3.8.2 화면 구조
 
 1. **Admin Tools**
-   - 라우트: `/admin/tools`
+   - 라우트: `/hq/tools`
    - 재집계/리빌드/테스트용 유틸리티 모음.
 
 2. **Admin Settings**
-   - 라우트: `/admin/settings`
+   - 라우트: `/hq/settings`
    - Admin 계정/권한, Feature Flag, Impersonation 정책 등의 설정.
 
 #### 3.8.3 Admin Tools 뷰
@@ -998,13 +1038,13 @@ NEURALTWIN ADMIN CONSOLE
    - “CSV를 업로드했는데 계속 실패합니다.”
 
 2. **관리자 플로우**
-   - Tenants & Users → 해당 테넌트 검색 → 상세 화면 진입
+   - 사용자 관리 → 해당 테넌트 검색 → 상세 화면 진입
    - “최근 데이터 임포트” 위젯에서 실패 건 클릭
-   - Data Pipeline & Quality → 해당 Job 상세 보기
+   - 데이터 관리 → 해당 Job 상세 보기
      - 오류 유형(필수 컬럼 누락/형식 오류/타임아웃 등) 확인
    - 필요 시 “재시도” 실행
    - 문제가 스키마/Ontology와 관련된 경우
-     → Ontology & Graph Governance 에서 해당 데이터 타입 스키마 점검
+     → 온톨로지 스키마 관리에서 해당 데이터 타입 스키마 점검
    - 처리 결과를 CS 시스템 또는 내부 메모에 기록
 
 ---
@@ -1015,11 +1055,11 @@ NEURALTWIN ADMIN CONSOLE
    - “전날보다 유입이 갑자기 0으로 나오는데, 실제로는 매장이 열려 있었습니다.”
 
 2. **관리자 플로우**
-   - Tenants & Users → 해당 테넌트 선택
-   - Data Pipeline & Quality → 해당 날짜 데이터 Health 확인
+   - 사용자 관리 → 해당 테넌트 선택
+   - 데이터 관리 → 해당 날짜 데이터 Health 확인
      - WiFi/Visits 데이터 누락/지연 여부 확인
    - 외부 API(공휴일/이벤트) 동기화 상태 확인
-   - 경우에 따라 KPI 집계 함수 에러 여부를 System & Error Console 에서 추가 확인
+   - 경우에 따라 KPI 집계 함수 에러 여부를 시스템 및 오류 관리에서 추가 확인
    - 문제가 파악되면 “해당 기간 대시보드 재집계” 실행
    - 재집계 이후, 수치 정상화 여부를 직접 확인 후 사용자에게 안내
 
@@ -1031,7 +1071,7 @@ NEURALTWIN ADMIN CONSOLE
    - “어제부터 레이아웃 시뮬레이션이 계속 에러가 납니다.”
 
 2. **관리자 플로우**
-   - AI & Simulation Monitoring → 해당 테넌트 필터
+   - AI 및 시뮬레이션 모니터링 → 해당 테넌트 필터
    - 실패 시나리오 목록에서 최근 레코드 확인
    - 관련 Edge Function 로그/오류 메시지 확인
    - 파라미터/데이터/모델 응답 중 어느 영역 문제인지 분류
@@ -1054,7 +1094,7 @@ NEURALTWIN ADMIN CONSOLE
    - 이때 업로드된 도면/사진/스케치 파일은 3D 제작 참고 자료로 함께 저장된다.
 
 2. **관리자 플로우**
-   - 3D 제작 요청 관리 → 요청 목록에서 상태 `Requested` 인 항목 확인
+   - 제작 요청 관리 → 요청 목록에서 상태 `Requested` 인 항목 확인
    - 해당 요청의 “상세 보기” 진입
      - 매장 도면/사진/필수 정보 검수
      - 누락 정보가 있을 경우 테넌트 측에 보완 요청
@@ -1062,7 +1102,7 @@ NEURALTWIN ADMIN CONSOLE
    - 필요 시 “응답” 화면에서 추가 설명/요청 사항 전달
    - 내부/외주 3D 팀이 외부 3D 툴에서 모델링/텍스처링/베이크 작업 수행
      - 완성된 3D 모델을 `glb` 형식으로 추출
-   - 관리자 콘솔의 3D 씬 & 에셋 스튜디오에서
+   - 관리자 콘솔의 3D 프로덕션 관리 화면에서
       - `glb`/`gltf` 및 관련 CSV/JSON 데이터를 업로드
       - 모델 레이어 관리에서 매장공간/가구/상품으로 분류
       - SceneRecipe 구성 후 “씬 업데이트”로 저장
@@ -1081,10 +1121,10 @@ NEURALTWIN ADMIN CONSOLE
      기존 타입 구조가 비즈니스 요구에 맞지 않는 상황.
 
 2. **관리자 플로우**
-   - Ontology & Graph Governance → 스키마 설계 변경
+   - 온톨로지 스키마 관리 → 스키마 설계 변경
    - 영향 받는 테넌트/데이터 유형 파악
    - 제한된 범위에서 사전 테스트용 테넌트/스토어 선정
-   - 변경 적용 후 Data Pipeline & Quality, Graph Monitoring 을 통해 품질 점검
+   - 변경 적용 후 데이터 관리, Graph Monitoring 을 통해 품질 점검
    - 문제 없을 시 전체 테넌트에 순차 적용
    - 스키마 버전 및 변경 이력 기록
 
@@ -1141,4 +1181,3 @@ NEURALTWIN ADMIN CONSOLE
 - Admin용 KPI 대시보드 (전체 테넌트 활성도, 이슈 처리 SLA 등)
 - 3D 디지털 트윈 제작 리드 타임/품질 지표 관리 대시보드
 - Ontology/Graph 변경에 대한 자동 영향 분석 리포트
-
