@@ -134,83 +134,94 @@ Website / Customer Dashboard 와 **동일한 Auth·Org·License·Data/Simulation
 
 ---
 
-## 2. 전체 IA 구조 (관리자 콘솔 메뉴)
+## 2. 전체 IA 구조 (HQ Admin 콘솔 메뉴)
 
 ### 2.1 상위 IA 개요
 
-관리자 콘솔은 **4개의 상위 도메인 탭**과 그 아래 **기능 단위 하위 섹션**으로 구성된다.
+HQ Admin 콘솔은 다음 **4개의 상위 도메인 그룹**과 하위 기능 단위 섹션으로 구성된다.
 
 ```text
-NEURALTWIN ADMIN CONSOLE
-├─ A. 운영/CS 관리
-│  ├─ 사용자 관리
-│  └─ 사용량 및 결제 관리
-│
-├─ B. 데이터 및 AI 관리
-│  ├─ 데이터 관리
-│  ├─ 온톨로지 스키마 관리
-│  └─ AI 및 시뮬레이션 모니터링
-│
-├─ C. 시스템 관리
-│  ├─ 시스템 및 오류 관리
-│  └─ 관리자 도구
-│
-└─ D. 3D 디지털 트윈 관리
-       ├─ 제작 요청 관리
-       └─ 3D 프로덕션 관리
+NEURALTWIN HQ ADMIN CONSOLE
+
+1. Tenants / Billing
+   ├─ Tenants                (/hq/tenants)
+   ├─ Licenses               (/hq/licenses)
+   ├─ Subscriptions          (/hq/subscriptions)
+   └─ Usage                  (/hq/usage)
+
+2. Data & Ontology
+   ├─ Ontology Schema        (/hq/ontology-schema)
+   ├─ Data Sources           (/hq/data-sources)
+   ├─ Pipelines              (/hq/pipelines)
+   └─ 3D Digital Twin Management
+        ├─ 제작 요청 관리    (/hq/3d-requests)
+        └─ 3D 프로덕션 관리  (/hq/3d-studio)
+
+3. Simulation & Models
+   ├─ Simulation Config      (/hq/simulation-config)
+   ├─ Model Versions         (/hq/model-versions)
+   ├─ Experiments            (/hq/experiments)
+   └─ AI & Simulation Monitoring
+        ├─ Overview          (/hq/ai-sim)
+        └─ Tenant Detail     (/hq/ai-sim/:tenantId)
+
+4. Ops / Security
+   ├─ Users                  (/hq/users)
+   ├─ Audit Logs             (/hq/audit-logs)
+   ├─ Alerts                 (/hq/alerts)
+   ├─ System & Error Console (/hq/system/errors, /hq/system/functions)
+   └─ Admin Tools & Settings (/hq/tools, /hq/settings)
 ```
 
-- 상위 탭(도메인): 운영/CS 관리, 데이터 및 AI 관리, 시스템 관리, 3D 디지털 트윈 관리
-- 하위 섹션: 사용자 관리, 사용량 및 결제 관리, 데이터 관리 등 기능 단위 화면들로 구성된다.
-- 라우팅(URL) 구조는 기능 단위 하위 섹션 기준으로 정의하고, UI 상에서 상위 탭별로 그룹화한다.
+- 상위 그룹: Tenants / Billing, Data & Ontology, Simulation & Models, Ops / Security
+- 하위 섹션: 실제 라우트 기준의 화면 단위로 구성된다.
+- 라우팅(URL) 구조는 기능 단위 하위 섹션 기준으로 정의하고, UI 상에서 상위 그룹별로 네비게이션을 묶는다.
 
 ### 2.2 라우팅 구조 예시
 
 ```tsx
 <Routes>
-  {/* Dashboard (공통 Admin 홈) */}
-  <Route path="/hq" element={<AdminHome />} />
+  {/* Dashboard (공통 HQ Admin 홈) */}
+  <Route path="/hq" element={<HqHome />} />
 
-  {/* A. 운영/CS 관리 */}
-  {/* 1. 사용자 관리 */}
+  {/* 1. Tenants / Billing */}
   <Route path="/hq/tenants" element={<TenantListPage />} />
   <Route path="/hq/tenants/:tenantId" element={<TenantDetailPage />} />
-
-  {/* 2. 사용량 및 결제 관리 */}
+  <Route path="/hq/licenses" element={<LicenseListPage />} />
+  <Route path="/hq/subscriptions" element={<SubscriptionListPage />} />
   <Route path="/hq/usage" element={<UsageOverviewPage />} />
   <Route path="/hq/usage/:tenantId" element={<TenantUsageDetailPage />} />
 
-  {/* B. 데이터 및 AI 관리 */}
-  {/* 3. 데이터 관리 */}
-  <Route path="/hq/data-pipeline" element={<DataPipelineOverviewPage />} />
-  <Route path="/hq/data-pipeline/:tenantId" element={<TenantDataHealthPage />} />
+  {/* 2. Data & Ontology */}
+  <Route path="/hq/ontology-schema" element={<OntologySchemaPage />} />
+  <Route path="/hq/data-sources" element={<DataSourcesPage />} />
+  <Route path="/hq/pipelines" element={<PipelinesOverviewPage />} />
+  {/* 3D Digital Twin Management (HQ 관점) */}
+  <Route path="/hq/3d-requests" element={<DigitalTwinRequestListPage />} />
+  <Route path="/hq/3d-studio" element={<DigitalTwinStudioPage />} />
 
-  {/* 4. 온톨로지 스키마 관리 */}
-  <Route path="/hq/ontology" element={<OntologySchemaPage />} />
-  <Route path="/hq/graph" element={<GlobalGraphMonitoringPage />} />
-  <Route path="/hq/graph/:tenantId" element={<TenantGraphDetailPage />} />
-
-  {/* 5. AI 및 시뮬레이션 모니터링 */}
+  {/* 3. Simulation & Models */}
+  <Route path="/hq/simulation-config" element={<SimulationConfigPage />} />
+  <Route path="/hq/model-versions" element={<ModelVersionsPage />} />
+  <Route path="/hq/experiments" element={<ExperimentsPage />} />
+  {/* AI & Simulation Monitoring */}
   <Route path="/hq/ai-sim" element={<AISimOverviewPage />} />
   <Route path="/hq/ai-sim/:tenantId" element={<TenantAISimDetailPage />} />
 
-  {/* D. 3D 디지털 트윈 관리 */}
-  {/* 6-1. 제작 요청 관리 */}
-  <Route path="/hq/3d-requests" element={<DigitalTwinRequestListPage />} />
-  {/* 6-2. 3D 프로덕션 관리 */}
-  <Route path="/hq/3d-studio" element={<DigitalTwinStudioPage />} />
-
-  {/* C. 시스템 관리 */}
-  {/* 7. 시스템 및 오류 관리 */}
+  {/* 4. Ops / Security */}
+  <Route path="/hq/users" element={<HqUsersPage />} />
+  <Route path="/hq/audit-logs" element={<AuditLogsPage />} />
+  <Route path="/hq/alerts" element={<AlertsPage />} />
+  {/* System & Error Console */}
   <Route path="/hq/system/errors" element={<ErrorConsolePage />} />
   <Route path="/hq/system/functions" element={<EdgeFunctionsStatusPage />} />
-
-  {/* 8. 관리자 도구 */}
+  {/* Admin Tools & Settings */}
   <Route path="/hq/tools" element={<AdminToolsPage />} />
   <Route path="/hq/settings" element={<AdminSettingsPage />} />
 </Routes>
 ```
 
+---
 ---
 
 ## 3. 섹션별 상세 설계
@@ -1181,3 +1192,374 @@ NEURALTWIN ADMIN CONSOLE
 - Admin용 KPI 대시보드 (전체 테넌트 활성도, 이슈 처리 SLA 등)
 - 3D 디지털 트윈 제작 리드 타임/품질 지표 관리 대시보드
 - Ontology/Graph 변경에 대한 자동 영향 분석 리포트
+
+
+## 8. 채널별 프로젝트 가이드 (Website / Customer Dashboard / HQ Admin)
+
+> 이 섹션은 각 채널별로 **별도 Lovable 프로젝트**를 만들 때  
+> “프로젝트 설명/컨텍스트”로 그대로 붙여 넣을 수 있는 형태의 가이드이다.  
+> 코어 Auth/Org/License/데이터 레이어는 세 프로젝트가 **공유**한다.
+
+---
+
+### 8.1 웹사이트 프로젝트 가이드 (Public Website)
+
+#### 8.1.1 프로젝트 목적
+
+NEURALTWIN의 마케팅/세일즈/온보딩 채널.
+
+주요 기능:
+
+- 서비스 소개, 기능/사례/가격
+- 회원가입/로그인
+- 구독 결제(플랜·점포 수 선택)
+- 가입 후 **조직(브랜드) + 라이선스** 생성 및 고객 대시보드 연결
+
+#### 8.1.2 공통 백엔드 연동 규칙
+
+- Auth / Org / License 백엔드는 **고객 대시보드·HQ와 동일 백엔드** 사용
+- 예시 환경변수:
+  - `SUPABASE_URL=...`
+  - `SUPABASE_ANON_KEY=...`
+- Website에서 생성된 계정은 **Customer Dashboard, HQ Admin에서 그대로 로그인 가능**
+
+회원가입 후 수행해야 하는 4단계:
+
+1. `auth`에 사용자 생성
+2. `organizations` 테이블에 org 레코드 생성
+3. `organization_members`에 `(user_id, org_id, role="ORG_OWNER")` 추가
+4. 구독 완료 시 `subscriptions` / `licenses`에 레코드 추가
+
+→ 이 4단계를 **웹사이트 프로젝트가 책임지고**,  
+나머지는 고객 대시보드/관리자 대시보드에서 동일 Org/License를 읽어 쓰는 구조.
+
+#### 8.1.3 도메인/라우팅 구조
+
+- 예시 도메인: `https://www.neuraltwin.ai`
+
+추천 라우트:
+
+- `/` – 랜딩 (히어로 + 주요 가치)
+- `/product` – 기능 소개(Overview/Analysis/Simulation/Data Management 요약)
+- `/pricing` – 플랜/요금/좌석 수 선택
+- `/signup` – 회원가입
+- `/login` – 로그인
+- `/checkout` – 플랜 선택 후 결제
+- `/demo` – 미니 피처/데모 링크
+- `/legal/*` – 이용약관/개인정보처리방침 등
+
+#### 8.1.4 구현해야 할 핵심 기능
+
+**A. 회원가입/로그인**
+
+- Auth Provider(Supabase/Auth0 등)와 연동
+- 이메일/비밀번호 + OAuth(구글/카카오/네이버) 지원
+
+Flow:
+
+1. `/signup`에서 이메일/패스워드 입력 → Auth API 호출 → 유저 생성
+2. 성공 시 조직 생성 API 호출:
+
+   ```http
+   POST /public/organizations
+   body: { user_id, org_name, industry, country }
+   응답: { org_id, default_plan }
+   ```
+
+3. `organization_members`에 `(user_id, org_id, role="ORG_OWNER")` 생성
+4. 로그인 상태 유지 (JWT/세션)
+
+**B. 구독 결제 (플랜 + 점포 수)**
+
+- `/pricing` 페이지:
+  - Starter / Pro / Enterprise 플랜 카드
+  - 매장 수, HQ seat 수 슬라이더/입력
+  - [시작하기] → `/checkout`
+- `/checkout`:
+  - 결제 수단/카드 정보 입력 후 PG/Stripe Checkout
+- 결제 완료 후 PG Webhook에서:
+  - `subscriptions` 테이블 업데이트
+  - `licenses` 테이블에 `org_id`, `store_quota`, `hq_seat_quota` 기록
+
+**C. 가입 후 고객 대시보드로 연결**
+
+- 결제/가입 후 마무리 페이지:
+
+  > “A매장(강남) 설정을 시작하세요 → [대시보드로 이동]”
+
+- 버튼: `https://app.neuraltwin.ai/login?org_id=...` 로 리다이렉트
+
+#### 8.1.5 Lovable용 요약 프롬프트 예시
+
+> 이 프로젝트는 NEURALTWIN 제품의 Public Website입니다.  
+>  
+> 목표:
+> - Supabase(Auth)와 같은 백엔드를 사용하여 회원가입/로그인을 처리합니다.
+> - 가입이 완료되면 organizations / organization_members / subscriptions / licenses 테이블에 기록합니다.
+> - 같은 Auth/Org를 사용하는 Customer Dashboard와 연동됩니다.  
+>  
+> 필수 페이지:
+> - /, /product, /pricing, /signup, /login, /checkout, /demo, /legal/*  
+>  
+> 주의:
+> - Auth/DB URL/Key는 Customer Dashboard/HQ Admin과 동일하게 설정합니다.
+> - 회원가입 및 결제 완료 후, org_id/plan/seat 정보를 백엔드에 저장하고 /app으로 리다이렉트합니다.
+
+---
+
+### 8.2 고객 대시보드 프로젝트 가이드 (Customer Dashboard)
+
+#### 8.2.1 프로젝트 목적
+
+NEURALTWIN의 실제 사용자용 **리테일 OS**.
+
+주요 기능:
+
+- 매장/데이터/퍼널 분석 (**Analysis**)
+- 레이아웃/수요/재고/가격/프로모션 시뮬레이션 (**Simulation**)
+- 디지털 트윈 관리·데이터 임포트 (**Data Management**)
+- 플랜/조직 기본 설정 (**Overview**)
+
+#### 8.2.2 공통 백엔드 연동
+
+- Website와 **같은 Auth/Org/License 백엔드** 사용
+- 로그인 시:
+  - `user_id + org_id`를 프런트 컨텍스트에 보관
+  - 모든 API 호출에 `org_id` 포함, 또는 서버/BFF에서 JWT에서 추출
+
+예: Supabase 사용 시
+
+```ts
+const { data: session } = await supabase.auth.getSession();
+const orgId = session?.user?.user_metadata?.org_id;
+```
+
+#### 8.2.3 IA / 라우트 구조 (고객용)
+
+1. **Overview**
+
+   - `/dashboard`
+   - `/stores`
+   - `/hq-store-sync`
+   - `/settings`
+
+2. **Analysis**
+
+   - `/analysis/footfall`
+   - `/analysis/traffic-heatmap`
+   - `/analysis/customer-journey`
+   - `/analysis/conversion-funnel`
+   - `/analysis/customer-analysis`
+   - `/analysis/inventory`
+   - `/analysis/profit-center`
+   - `/analysis/product-performance`
+
+3. **Simulation**
+
+   - `/simulation/hub`
+   - `/simulation/layout`
+   - `/simulation/demand`
+   - `/simulation/inventory`
+   - `/simulation/pricing`
+   - `/simulation/recommendation`
+
+4. **Data Management (테넌트 범위)**
+
+   - `/digital-twin-3d`
+   - `/data-import`
+   - `/schema-builder` (제한된 기능)
+
+#### 8.2.4 핵심 기능별 가이드
+
+**A. `/dashboard` (Overview)**
+
+- 입력: `org_id`, store 필터, 기간 필터
+- 데이터 소스:
+  - `dashboard_kpis`, `ai_recommendations`, `stores`
+- 표시:
+  - KPI 카드, 퍼널 요약, 상위/하위 매장
+  - “오늘의 AI 추천 액션” (Simulation Hub 결과 반영)
+
+**B. Analysis 섹션**
+
+각 페이지 공통:
+
+- Filter Bar: Store, Date Range, Segment 등
+- 중앙: 차트/히트맵/퍼널
+- 우측/하단: TopN/인사이트 카드
+
+Backend 예:
+
+```http
+GET /app/analysis/footfall?store_id=A001&date_from=...
+```
+
+**C. Simulation 섹션**
+
+핵심: `/simulation/hub` + 모듈별 페이지를 **같은 패턴**으로 구현.
+
+- Hub:
+  - 5개 모듈 카드
+  - [시뮬레이션 실행], [전체 분석 실행]
+- 각 모듈:
+  - 파라미터 폼 → `advanced-ai-inference` Edge Function 호출
+  - 결과 수치 + 인사이트 + Action 저장
+
+레이아웃/수요/재고/가격/프로모션에 대한 시뮬레이션 허브 상세 가이드는  
+별도 문서/스펙에 따라 구현.
+
+**D. Data Management 섹션**
+
+- `/digital-twin-3d`:
+  - `store_scenes`, `furniture_layout`, `product_placement` 등을 조회/저장
+  - 고객 테넌트가 **자신의 매장**을 직접 편집 가능
+- `/data-import`:
+  - POS/CRM/ERP/센서 데이터의 CSV/API 등록 UI
+  - 업로드 → `user_data_imports` 기록 → 후속 ETL/Edge Function 트리거
+
+#### 8.2.5 Lovable용 요약 프롬프트 예시
+
+> 이 프로젝트는 NEURALTWIN의 Customer Dashboard(고객용 리테일 OS)입니다.  
+>  
+> 전제:
+> - Auth/Org/License 백엔드는 Website/HQ Admin과 동일한 Supabase 프로젝트를 사용합니다.
+> - 로그인 후, user는 반드시 org_id 컨텍스트로 동작합니다.
+> - 모든 화면은 4개의 섹션으로 구성됩니다: Overview / Analysis / Simulation / Data Management.  
+>  
+> 필수 구현:
+> - /dashboard: 주요 KPI/퍼널/AI 추천 액션 카드
+> - /analysis/*: footfall, heatmap, journey, funnel, product performance 등
+> - /simulation/hub 및 /simulation/*: layout, demand, inventory, pricing, promotion 시뮬레이션
+> - /digital-twin-3d: 3D Twin 뷰어/에디터 사용  
+>  
+> Simulation Hub:
+> - /simulation/hub에서 5개의 모듈(Layout/Demand/Inventory/Pricing/Promotion)을 카드 형태로 노출합니다.
+> - 각 모듈은 scenarioType과 params를 받아 advanced-ai-inference Edge Function을 호출합니다.
+> - 결과로 반환되는 ΔKPI와 인사이트를 카드/차트에 보여줍니다.
+
+---
+
+### 8.3 관리자 대시보드 프로젝트 가이드 (NEURALTWIN HQ)
+
+#### 8.3.1 프로젝트 목적
+
+NEURALTWIN 내부 팀(HQ)을 위한 **운영 콘솔**.
+
+주요 기능:
+
+- 전체 Tenants / Organizations / Subscriptions / License 관리
+- 온톨로지 스키마 / Ontology Version 관리
+- 데이터 소스 / ETL 파이프라인 / 에러 모니터링
+- AI 모델 / Simulation Config 관리
+- Audit / 보안 / 권한 관리
+
+#### 8.3.2 Auth / 권한
+
+- Website/Customer와 **같은 Auth 백엔드** 사용
+- 단, **내부 계정만 접근 가능**
+
+역할 예시:
+
+- `NEURALTWIN_ADMIN`
+- `INTERNAL_USER`
+
+정책:
+
+- JWT claims 또는 RBAC 테이블에서 `is_internal = true` 플래그 체크
+- 내부 도메인 예: `https://hq.neuraltwin.ai`
+
+#### 8.3.3 IA / 라우트 구조 (HQ용 요약)
+
+1. **Tenants / Billing**
+   - `/hq/tenants`
+   - `/hq/licenses`
+   - `/hq/subscriptions`
+   - `/hq/usage`
+
+2. **Data & Ontology**
+   - `/hq/ontology-schema`
+   - `/hq/data-sources`
+   - `/hq/pipelines`
+
+3. **Simulation & Models**
+   - `/hq/simulation-config`
+   - `/hq/model-versions`
+   - `/hq/experiments` (A/B 테스트)
+
+4. **Ops / Security**
+   - `/hq/users`
+   - `/hq/audit-logs`
+   - `/hq/alerts`
+
+> 본 문서의 2–3장에 나오는 상세 IA/섹션 설계는  
+> 위 라우트 구조를 기준으로 확장·구체화한 것이다.
+
+#### 8.3.4 기능별 상세 요약
+
+**A. `/hq/tenants` & `/hq/licenses`**
+
+- 리스트:
+  - `org_id`, `org_name`, `plan`, `status`, `store_count`, `created_at`
+- 하단:
+  - 라이선스 (점포 수, HQ seats, 만료일 등)
+- 액션:
+  - 테넌트 생성/비활성화
+  - 플랜/쿼터 변경
+  - 테스트/샌드박스 테넌트 생성
+
+**B. `/hq/ontology-schema`**
+
+- 온톨로지 엔티티/관계 타입 편집 UI
+  - `entity_type_id`, `display_name`, 필수 속성 목록, 설명
+- 각 변경 사항에 대해:
+  - 버전 관리
+  - 주요 테넌트에 대한 영향도 표시 (ex. schema v1 → v2)
+
+**C. `/hq/data-sources` & `/hq/pipelines`**
+
+- 테넌트별 데이터 소스(연결된 POS/CRM/ERP/센서) 목록
+- ETL Job 상태:
+  - success/fail, last run, duration
+- ETL 재시작/강제 실행 버튼
+- 에러 로그/누락 데이터 탐색
+
+**D. `/hq/simulation-config` & `/hq/model-versions`**
+
+- 기본 시뮬레이션 파라미터 관리:
+  - 예: layout_optimization에서 ΔCVR 상/하한, 수요/가격 탄력성 파라미터
+- 모델 버전:
+  - active version, candidate version, rollback 버전 관리
+- A/B 실험 (`/hq/experiments`):
+  - 일부 테넌트에만 새 버전 적용, 결과 모니터링
+
+**E. `/hq/audit-logs` & `/hq/alerts`**
+
+- Audit:
+  - HQ 콘솔에서 일어난 중요한 변경 (플랜 변경, 스키마 변경 등) 기록
+- Alerts:
+  - ETL 실패, AI inference 오류, 데이터 지연, 월별 usage 폭증 등
+
+#### 8.3.5 Lovable용 요약 프롬프트 예시
+
+> 이 프로젝트는 NEURALTWIN 팀 내부용 HQ Admin Dashboard입니다.  
+>  
+> 역할:
+> - Tenants(고객 조직) / Licenses / Subscriptions 관리
+> - Ontology Schema/Version 관리
+> - 데이터 소스/ETL 파이프라인 모니터링
+> - 시뮬레이션/AI 모델 버전 관리
+> - 감사로그/알림/보안 관제  
+>  
+> Auth:
+> - Website/Customer와 동일한 Auth 백엔드를 사용하지만,
+> - 로그인 사용자는 role이 NEURALTWIN_ADMIN 또는 is_internal=true 여야 합니다.  
+>  
+> 필수 페이지:
+> - /hq/tenants, /hq/licenses, /hq/subscriptions, /hq/usage
+> - /hq/ontology-schema, /hq/data-sources, /hq/pipelines
+> - /hq/simulation-config, /hq/model-versions, /hq/experiments
+> - /hq/users, /hq/audit-logs, /hq/alerts  
+>  
+> 주의:
+> - 이 프로젝트에서는 multi-tenant 데이터를 전부 볼 수 있으므로,
+> - 모든 API 호출에 대해 권한/로그를 반드시 남겨야 합니다.
