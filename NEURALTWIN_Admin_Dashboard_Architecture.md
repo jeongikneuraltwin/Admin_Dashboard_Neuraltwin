@@ -1141,29 +1141,343 @@ NEURALTWIN HQ ADMIN CONSOLE
 
 ---
 
-## 5. 권한 & 보안 아키텍처 (Admin 관점)
+## 5. Supabase 공통 백엔드 & 권한 아키텍처
 
-### 5.1 Admin 권한 모델
+### 5.1 전체 컨셉 한 줄 요약
 
-- Admin 전용 Role (예: `platform_admin`, `ops_admin`, `read_only_admin`)
-- 고객 테넌트의 일반 사용자 Role 과는 분리
-- Supabase RLS 및 `has_role()`, `is_admin()` 함수 기반 접근 제어
+> **Supabase 프로젝트 1개 = NEURALTWIN 공통 백엔드**
 
-### 5.2 데이터 접근 원칙
+이 하나의 Supabase 프로젝트를
 
-- 고객 테넌트 데이터는 관리자에 의해 조회 가능하되,
-  - Audit 로그에 모든 조회 내역 기록 (누가, 언제, 어떤 테넌트/스토어/데이터를 조회했는지)
-- Impersonation 기능 사용 시
-  - 실제 조작 권한(쓰기/삭제)은 제한하거나 별도 경고 표시
-  - 필요한 경우 “읽기 전용” 미러링 모드 우선 도입
+- **Website (Public)**
+- **Customer Dashboard (고객용 앱)**
+- **HQ Admin (관리자 콘솔)**
 
-### 5.3 Graph/Ontology 접근 정책
+이 세 개 Lovable 프론트엔드에서 **같은 Auth / DB / Edge Functions** 로 접근하는 구조다.
 
-- Graph 구조(`graph_entities`, `graph_relations`)는 기본적으로 관리자 콘솔에서만 조회/관리 가능
-  (고객 앱에서는 직접 노드/엣지를 볼 수 없음)
-- 고객 앱의 Graph 관련 기능 요청은 반드시 Admin 측에서 검토 후 단계적 제공
+- Website:  
+  유저·조직·구독을 **만드는 입구**
+- Customer Dashboard:  
+  조직이 실제로 **매장/데이터/시뮬레이션을 돌리는 운영 도구**
+- HQ Admin:  
+  NEURALTWIN 팀이 **모든 테넌트·온톨로지·파이프라인·모델·비즈니스를 컨트롤하는 타워**
 
 ---
+
+### 5.2 Supabase 프로젝트 1개 만들기
+
+1. Supabase 콘솔에서 **새 프로젝트 1개** 생성  
+2. 이 프로젝트를 Website / Customer Dashboard / HQ Admin **전 채널의 공통 백엔드**로 사용
+
+3개 Lovable 프로젝트에 **동일한 환경변수**를 셋업한다.
+
+```env
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_ANON_KEY=public-anon-key
+SUPABASE_SERVICE_KEY=service-role-key  # 서버/Edge Functions 전용
+```
+
+- Website / Customer / HQ 모두 **같은 URL/ANON_KEY**를 쓰는 것이 핵심
+- Edge Functions나 백오피스 스크립트에서는 `SERVICE_KEY` 사용
+
+각 프론트엔드에서는 대략 이런 형태로 Supabase Client를 만든다.
+
+```ts
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+```
+
+---
+
+### 5.3 Auth & 멀티테넌시 설계
+
+Supabase는 기본적으로 `auth.users` 테이블을 제공하므로,  
+여기에 우리가 필요한 **조직(Brand) / 역할 / 라이선스** 레이어만 얹는다.
+
+#### 5.3.1 핵심 테이블 구조 (개념)
+
+```sql
+-- 조직 (브랜드/기업 단위)
+create table organizations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  created_at timestamptz default now()
+);
+
+-- 조직 구성원 (유저↔조직 관계 + 역할)
+create table organization_members (
+  org_id uuid references organizations(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  role text check (role in ('ORG_OWNER','HQ_ANALYST','STORE_MANAGER','VIEW_ONLY','NEURALTWIN_ADMIN')),
+  created_at timestamptz default now(),
+  primary key (org_id, user_id)
+);
+
+-- 구독/플랜 (Stripe/PG 연동 결과)
+create table subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid references organizations(id) on delete cascade,
+  provider text not null,          -- 'stripe' or 'toss' etc.
+  provider_sub_id text not null,   -- stripe subscription id
+  plan text not null,              -- 'starter','pro','enterprise'
+  status text not null,            -- 'active','past_due','canceled',...
+  current_period_end timestamptz,
+  created_at timestamptz default now()
+);
+
+-- 라이선스/쿼터 (매장 수/HQ seat 수 등)
+create table licenses (
+  org_id uuid references organizations(id) primary key,
+  max_stores int not null default 1,
+  max_hq_seats int not null default 1,
+  max_events_per_month int,
+  created_at timestamptz default now()
+);
+```
+
+운영 데이터(Stores, Products, Customers, Visits, Purchases, Inventory …)에도  
+**반드시 `org_id` 컬럼을 포함**하여 멀티테넌시를 유지한다.
+
+```sql
+create table stores (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid references organizations(id) on delete cascade,
+  store_code text not null,
+  name text not null
+  -- ...
+);
+```
+
+#### 5.3.2 RLS(Row Level Security)로 테넌트 격리
+
+Supabase의 강점은 **RLS** 이므로,  
+멀티테넌트 테이블에는 전부 RLS를 켜고 정책을 걸어준다.
+
+```sql
+alter table organizations enable row level security;
+alter table organization_members enable row level security;
+alter table stores enable row level security;
+-- etc...
+```
+
+정책 예시 – “내가 멤버인 조직만 조회 가능”:
+
+```sql
+create policy "members can select their org"
+on organizations
+for select using (
+  exists (
+    select 1 from organization_members om
+    where om.org_id = organizations.id
+      and om.user_id = auth.uid()
+  )
+);
+```
+
+이렇게 하면 Website / Customer / HQ 가 **모두 같은 DB**를 쓰더라도,  
+JWT 안의 `user_id`와 `org_id`에 따라 각 채널에서 볼 수 있는 데이터가 자동으로 제한된다.
+
+- **Customer Dashboard**  
+  - 보통 `ORG_OWNER / HQ_ANALYST / STORE_MANAGER / VIEW_ONLY` 역할
+- **HQ Admin**  
+  - `NEURALTWIN_ADMIN` 역할일 때  
+    모든 org를 조회할 수 있게 하는 **별도 RLS Policy**를 추가로 둔다  
+  - 예: `role = 'NEURALTWIN_ADMIN'` 이면 `org_id` 필터 없이 select 허용
+
+---
+
+### 5.4 공통 API / Edge Functions 계층
+
+Supabase는 기본 REST + RPC를 제공하지만,  
+비즈니스 로직/AI/시뮬레이션은 **Edge Functions** 레이어로 감싼다.
+
+- 간단 CRUD → Supabase Table/REST 직접 사용
+- 복잡한 로직 / 통합 처리 / AI 호출 → Edge Functions (Deno) 사용
+
+#### 5.4.1 가입/조직 생성용 Edge Function (Website → 공통 Org 생성)
+
+Website에서 회원가입을 마친 뒤,  
+조직과 라이선스를 자동으로 만드는 Edge Function을 호출한다.
+
+프론트(Website) 예시:
+
+```ts
+const { data: { user }, error } = await supabase.auth.signUp({ email, password });
+
+if (user) {
+  await fetch('/functions/v1/create-org-and-license', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${user.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      org_name: companyName,
+      plan: 'starter'
+    })
+  });
+}
+```
+
+Edge Function 개념 예시:
+
+```ts
+// supabase/functions/create-org-and-license/index.ts
+import { serve } from "https://deno.land/std/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js";
+
+serve(async (req) => {
+  const supabase = createClient(DENO_SUPABASE_URL, DENO_SUPABASE_SERVICE_KEY);
+  const authHeader = req.headers.get("Authorization") || "";
+  const jwt = authHeader.replace("Bearer ", "");
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+  if (authError || !user) return new Response("Unauthorized", { status: 401 });
+
+  const { org_name, plan } = await req.json();
+
+  // org 생성
+  const { data: org, error: orgError } = await supabase
+    .from("organizations")
+    .insert({ name: org_name })
+    .select()
+    .single();
+
+  // 멤버 연결
+  await supabase.from("organization_members").insert({
+    org_id: org.id,
+    user_id: user.id,
+    role: "ORG_OWNER"
+  });
+
+  // 기본 라이선스
+  await supabase.from("licenses").insert({
+    org_id: org.id,
+    max_stores: plan === "pro" ? 5 : 1,
+    max_hq_seats: plan === "pro" ? 5 : 1
+  });
+
+  return new Response(JSON.stringify(org), { status: 200 });
+});
+```
+
+→ Website는 “유저 생성 + Edge Function 호출”까지만 하면 되고,  
+Customer/HQ는 DB에서 동일 `org_id` 정보를 그대로 읽어서 사용한다.
+
+#### 5.4.2 시뮬레이션/AI용 Edge Function (NEURALTWIN Core)
+
+이미 사용 중인 `advanced-ai-inference`, `integrated-data-pipeline` 등이 여기에 해당한다.
+
+공통 API 형태 예시:
+
+```http
+POST /functions/v1/advanced-ai-inference
+
+{
+  "scenario_type": "layout" | "demand" | "inventory" | "pricing" | "promotion",
+  "org_id": "…",
+  "store_id": "A001",
+  "params": { ... } // 모듈별 파라미터
+}
+```
+
+Edge Function 내부에서:
+
+1. `org_id`, `store_id` 기반으로 Supabase DB에서 NEURALMIND 데이터 조회  
+2. AI/모델 로직 실행  
+3. ΔKPI, 추천안, 로그를 반환/저장
+
+- Customer Dashboard:
+  - 이 함수를 직접 호출해 시뮬레이션을 실행
+- HQ Admin:
+  - 이 함수 자체를 호출하기보다는  
+    “실행 이력/실패율/응답시간”을 모니터링하는 쪽에 집중
+
+---
+
+### 5.5 채널별 역할 분리 & HQ 권한 모델
+
+#### 5.5.1 채널별 책임 정리
+
+- **Website 프로젝트**
+  - `supabase.auth`로 회원가입/로그인 처리
+  - 회원가입 후 `create-org-and-license` Edge Function 호출
+  - 결제 Webhook(Stripe/PG)에서
+    - `subscriptions`, `licenses` 업데이트 책임
+
+- **Customer Dashboard 프로젝트**
+  - 로그인 시 Supabase JWT 확인
+  - `organization_members`에서 사용자의 org/role 로딩
+  - 모든 API/쿼리에 `org_id` 필터 적용 (또는 BFF에서 자동 필터)
+  - Analysis / Simulation / Digital Twin 화면에서
+    - Supabase 테이블 + Edge Functions 호출
+
+- **HQ Admin 프로젝트**
+  - 동일 Auth를 쓰지만, `role = 'NEURALTWIN_ADMIN'` 또는 `is_internal = true` 만 접근 허용
+  - `organizations`, `subscriptions`, `licenses`, `ontology_*`, `pipelines`, `admin_*` 등
+    **모든 테넌트 데이터**를 조회·관리
+  - 멀티테넌트 구조 전체를 보는 “슈퍼 유저”이므로,
+    모든 요청에 대해 Audit Log를 남기는 것이 필수
+
+#### 5.5.2 HQ Admin 권한 모델
+
+HQ Admin에서 사용하는 내부 Role 예시:
+
+- `platform_admin` (또는 `NEURALTWIN_ADMIN`)
+- `ops_admin`
+- `read_only_admin`
+
+특징:
+
+- **고객 테넌트의 일반 Role** (`ORG_OWNER`, `HQ_ANALYST` 등)과는 별도의 레벨
+- RLS에서는
+  - 일반 유저: 자신의 org 데이터만
+  - HQ Admin: 모든 org 데이터 + 내부 admin 테이블(`admin_*`) 접근 허용
+- 정책 구현:
+  - Supabase의 `auth.jwt()` 또는 별도 RBAC 테이블에서
+    `is_internal = true`, `admin_role` 등을 확인하여 분기
+  - Edge Functions에서도 JWT Claims 검사로 동일 정책 적용
+
+#### 5.5.3 데이터 접근 원칙
+
+- 고객 테넌트 데이터는 **HQ Admin에 의해 조회 가능**하되,
+  - 누가 / 언제 / 어떤 테넌트/스토어/데이터를 조회했는지  
+    `admin_actions` / `admin_audit_logs` 같은 테이블에 기록
+- Impersonation 기능 사용 시
+  - 실제 조작 권한(쓰기/삭제)은 제한하거나 별도 경고 표시
+  - 우선은 “읽기 전용” 미러링 모드를 기본으로 도입
+
+#### 5.5.4 Graph/Ontology 접근 정책
+
+- Graph 구조(`graph_entities`, `graph_relations`)는
+  **기본적으로 HQ Admin 콘솔에서만 조회/관리 가능**
+  - 고객 앱에서는 직접 노드/엣지를 볼 수 없음
+- 고객 앱이 Graph를 간접적으로 쓰는 경우
+  - 예: 디지털 트윈 분석, 추천, 동선 분석 등
+  - Graph 자체는 노출하지 않고, **결과/지표/추천**만 제공
+- Ontology 스키마 변경:
+  - HQ Admin에서 설계/검토 후
+  - 영향 받을 테넌트/데이터 유형을 점검하고
+  - 제한된 범위에서 먼저 테스트 → 전체 롤아웃
+
+---
+
+### 5.6 한 줄 정리
+
+> Supabase 프로젝트 1개를  
+> Auth(User) + 멀티테넌트 DB + Edge Functions의 **공통 백엔드**로 만든다.  
+>  
+> 3개의 Lovable 프로젝트(Website / Customer / HQ)는  
+> 같은 Supabase URL/Key를 사용하면서,  
+> 각자 **자기 역할에 맞는 테이블/함수**만 사용한다.  
+>  
+> 멀티테넌시는 `organizations + organization_members + org_id + RLS` 구조로 구현하고,  
+> HQ Admin은 그 위에 **전 테넌트 관점의 권한/모니터링/거버넌스 레이어**를 올린다.
+
 
 ## 6. 데이터/로그 구조 개요 (Admin용 메타 데이터)
 
